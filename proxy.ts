@@ -51,6 +51,13 @@ function register(node: Node) {
     ws: true
   });
 
+  proxy.on('proxyRes', (proxyRes, req, res) => {
+    proxyRes.headers = Object.keys(proxyRes.headers)
+        .filter(h => (!h.toLowerCase().startsWith('access-control-') && !h.toLowerCase().startsWith('vary')))
+        .reduce((all, h) => ({ ...all, [h]: proxyRes.headers[h] }), {});
+  });
+
+
   proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
     /**
      * Prevent stale socket connections / memory-leaks
