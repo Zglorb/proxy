@@ -51,6 +51,12 @@ function register(node: Node) {
     ws: true
   });
 
+  proxy.on('proxyRes', (proxyRes, req, res) => {
+    proxyRes.headers = Object.keys(proxyRes.headers)
+        .filter(h => (!h.toLowerCase().startsWith('access-control-') && !h.toLowerCase().startsWith('vary')))
+        .reduce((all, h) => ({ ...all, [h]: proxyRes.headers[h] }), {});
+  });
+
   proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
     /**
      * Prevent stale socket connections / memory-leaks
@@ -67,9 +73,11 @@ function register(node: Node) {
     console.error(`Proxy error during: ${req.url}`);
     console.error(err.stack);
 
-    console.warn(`node ${node.processId}/${node.address} failed, unregistering`);
-    unregister(node);
-    cleanUpNode(node).then(() => console.log(`cleaned up ${node.processId} presence`));
+    if (err.message !== "socket hang up"){
+      console.warn(`node ${node.processId}/${node.address} failed, unregistering`);
+      unregister(node);
+      cleanUpNode(node).then(() => console.log(`cleaned up ${node.processId} presence`));
+    }
 
     reqHandler(req, res); // try again!
   });
@@ -106,6 +114,16 @@ getNodeList().
   catch(err => console.error(err));
 
 const reqHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
+    if (req.method === 'OPTIONS') {
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-credentials', 'true');
+    res.setHeader('access-control-allow-methods', '*');
+    res.setHeader('access-control-allow-headers', '*');
+    res.setHeader('access-control-max-age', 60 * 60 * 24 * 30);
+    res.statusCode = 200;
+    res.end();
+    return;
+  }
   const proxy = getProxy(req.url!);
 
   if (proxy) {
